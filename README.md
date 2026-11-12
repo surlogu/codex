@@ -1,16 +1,16 @@
 # Offline Grammar Fix
 
-An Android text action for Gboard and other keyboards. Select text in an app, choose **Fix grammar**, and Android returns the corrected selection to the app. English checking uses the bundled LanguageTool rules locally; the app has no Internet permission.
+An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported. English checking uses the bundled LanguageTool rules locally; the app has no Internet permission.
 
 ## Build
 
 Open this project in Android Studio, or run `./gradlew assembleDebug` after installing Android SDK platform 35 and build tools.
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The checked-in APK is at `output/OfflineGrammarFix.apk`.
 
 ## Use
 
-Install the APK, select editable English text, and choose **Fix grammar** in the selection toolbar (or its overflow menu). The launcher screen has a selectable sample sentence.
+Install the APK and either enter text in the app and tap **Fix Grammar**, or select editable English text in another app and choose **Fix grammar** in the selection toolbar (or its overflow menu). The selection action opens the app with the selected text filled in; after correction, choose **Replace selected text** or **Copy corrected text**.
 
 Some host apps do not support text replacement or expose the selected text as read-only.
 

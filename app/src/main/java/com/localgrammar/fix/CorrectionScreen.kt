@@ -39,6 +39,7 @@ class CorrectionScreen(
     private val fixButton = Button(context)
     private val copyButton = Button(context)
     private val replaceButton = Button(context)
+    private val localModel = LocalOnDeviceModel(context)
 
     init {
         setBackgroundColor(0xFFF7F8FC.toInt())
@@ -51,7 +52,7 @@ class CorrectionScreen(
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         content.addView(label(if (canReplaceSelection) "Fix selected text" else "Offline Grammar Fix", 24f, true))
-        content.addView(label("Your text is checked on this device.", 14f), matchWidth().withTopMargin(4))
+        content.addView(label("T5-small offline model · text stays on this device", 14f), matchWidth().withTopMargin(4))
 
         content.addView(label("Text to correct", 16f, true), matchWidth().withTopMargin(24))
         input.apply {
@@ -118,6 +119,9 @@ class CorrectionScreen(
             }
         }
 
+        content.addView(localModel.webView, LinearLayout.LayoutParams(dp(1), dp(1)))
+        localModel.start()
+
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -148,7 +152,7 @@ class CorrectionScreen(
         fixButton.isEnabled = false
         fixButton.text = "Fixing…"
         progress.visibility = View.VISIBLE
-        showStatus("Checking grammar locally…", error = false)
+        showStatus("Running the offline grammar model…", error = false)
         copyButton.isEnabled = false
         if (canReplaceSelection) replaceButton.isEnabled = false
         output.text = ""
@@ -157,9 +161,13 @@ class CorrectionScreen(
 
         scope.launch {
             try {
-                val corrected = withContext(Dispatchers.IO) {
-                    LocalGrammarCorrector.correct(text)
+                val modelCorrected = localModel.correct(text) { message ->
+                    post { showStatus(message, error = false) }
                 }
+                val localRulesCorrection = withContext(Dispatchers.IO) {
+                    runCatching { LocalGrammarCorrector.correct(text) }.getOrNull()
+                }
+                val corrected = chooseCorrection(text, modelCorrected, localRulesCorrection)
                 val elapsedSeconds = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
                 output.text = corrected
                 outputCount.text = "${counts(corrected)}  ·  Time: ${"%.2f".format(java.util.Locale.US, elapsedSeconds)} s"
@@ -182,6 +190,8 @@ class CorrectionScreen(
         }
     }
 
+    fun close() = localModel.close()
+
     private fun showStatus(message: String, error: Boolean) {
         status.text = message
         status.setTextColor(if (error) 0xFFB42318.toInt() else 0xFF43506A.toInt())
@@ -191,6 +201,14 @@ class CorrectionScreen(
     private fun counts(text: String): String {
         val wordCount = text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         return "Words: $wordCount  ·  Characters: ${text.length}"
+    }
+
+    private fun chooseCorrection(input: String, modelText: String, rulesText: String?): String {
+        if (rulesText.isNullOrBlank() || rulesText == input || modelText.isBlank()) return modelText
+        val modelWords = modelText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+        val rulesWords = rulesText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+        // Keep short spelling fixes when the generation model tries to paraphrase them.
+        return if (modelWords > 6 && modelWords > rulesWords * 1.5) rulesText else modelText
     }
 
     private fun label(value: String, size: Float, bold: Boolean = false) = TextView(context).apply {

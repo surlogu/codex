@@ -5,8 +5,17 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 
 class MainActivity : AppCompatActivity() {
+    private var correctionScreen: CorrectionScreen? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(CorrectionScreen(this, lifecycleScope))
+        correctionScreen = CorrectionScreen(this, lifecycleScope)
+        setContentView(correctionScreen)
+    }
+
+    override fun onDestroy() {
+        correctionScreen?.close()
+        correctionScreen = null
+        super.onDestroy()
     }
 }

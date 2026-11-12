@@ -1,6 +1,8 @@
 # Offline Grammar Fix
 
-An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported. English checking uses the bundled LanguageTool rules locally; the app has no Internet permission.
+An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported.
+
+The main corrector is a bundled, quantized T5-small model fine-tuned for English grammar correction. It runs locally with Transformers.js and ONNX Runtime WebAssembly. LanguageTool's bundled English rules help keep short spelling fixes from being rewritten awkwardly. The app does not request Internet permission, so the model works offline after installation.
 
 ## Build
 
@@ -16,4 +18,4 @@ Some host apps do not support text replacement or expose the selected text as re
 
 ## License
 
-Application source: MIT. Grammar checking uses LanguageTool 6.8, licensed under LGPL-2.1; see https://languagetool.org/ and https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html. LanguageTool's bundled language resources may carry separate notices.
+Application source: MIT. The T5 grammar model is MIT licensed; model attribution is in `app/src/main/assets/models/grammar-t5-small/MODEL_NOTICE.txt`. Transformers.js is Apache-2.0. ONNX Runtime Web is MIT. The LanguageTool fallback is LGPL-2.1; its bundled language resources may carry separate notices. See https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.

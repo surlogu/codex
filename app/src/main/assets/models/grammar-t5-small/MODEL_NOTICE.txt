@@ -1,0 +1,7 @@
+Model: grammar-t5-small
+Original model: https://huggingface.co/huytd189/grammar-t5-small
+ONNX conversion: https://huggingface.co/TeXlyre/grammar-t5-small-onnx
+Model weights license: MIT
+Pinned ONNX repository revision: af3c4643569d421e8ac2b815e112c2150e56bf46
+
+The model is trained for English grammar correction using the Grammarly CoEdIT dataset. It runs locally through Transformers.js and ONNX Runtime WebAssembly. No text is sent to a server.

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline grammar model</title>
+</head>
+<body>
+<script type="module">
+import { env, pipeline } from './transformers.min.js';
+
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
+env.localModelPath = './models/';
+env.backends.onnx.wasm.wasmPaths = './';
+env.backends.onnx.wasm.numThreads = 1;
+
+let grammarModel;
+
+window.correctText = async (text) => {
+  try {
+    if (!grammarModel) {
+      NativeModel.onProgress('Loading the offline T5 grammar model…');
+      grammarModel = await pipeline(
+        'text2text-generation',
+        'grammar-t5-small',
+        { dtype: 'q8' }
+      );
+    }
+    NativeModel.onProgress('Correcting text on this device…');
+    const prompt = `Rewrite and fix: '${text}'`;
+    const result = await grammarModel(prompt, {
+      max_new_tokens: 96,
+      num_beams: 2,
+      early_stopping: true
+    });
+    let corrected = result?.[0]?.generated_text?.trim() ?? '';
+    if (corrected.length >= 2) {
+      const first = corrected[0];
+      const last = corrected[corrected.length - 1];
+      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+        corrected = corrected.slice(1, -1).trim();
+      }
+    }
+    NativeModel.onResult(corrected);
+  } catch (error) {
+    NativeModel.onFailure(String(error?.message ?? error));
+  }
+};
+NativeModel.pageReady();
+</script>
+</body>
+</html>

@@ -7,6 +7,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 
 class FixTextActivity : AppCompatActivity() {
+    private var correctionScreen: CorrectionScreen? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -24,17 +26,22 @@ class FixTextActivity : AppCompatActivity() {
         }
 
         val canReplace = !intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
-        setContentView(
-            CorrectionScreen(
-                context = this,
-                scope = lifecycleScope,
-                initialText = selectedText,
-                canReplaceSelection = canReplace,
-                onReplaceSelection = { corrected ->
-                    setResult(Activity.RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, corrected))
-                    finish()
-                }
-            )
+        correctionScreen = CorrectionScreen(
+            context = this,
+            scope = lifecycleScope,
+            initialText = selectedText,
+            canReplaceSelection = canReplace,
+            onReplaceSelection = { corrected ->
+                setResult(Activity.RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, corrected))
+                finish()
+            }
         )
+        setContentView(correctionScreen)
+    }
+
+    override fun onDestroy() {
+        correctionScreen?.close()
+        correctionScreen = null
+        super.onDestroy()
     }
 }

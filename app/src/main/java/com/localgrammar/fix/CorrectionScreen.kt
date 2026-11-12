@@ -31,6 +31,7 @@ class CorrectionScreen(
     private val scope: LifecycleCoroutineScope,
     initialText: String = "",
     private val canReplaceSelection: Boolean = false,
+    private val autoCorrectOnOpen: Boolean = false,
     private val onReplaceSelection: (String) -> Unit = {}
 ) : ScrollView(context) {
     private val primaryGreen = Color.rgb(22, 112, 76)
@@ -45,6 +46,11 @@ class CorrectionScreen(
     private val fixButton = Button(context)
     private val copyButton = Button(context)
     private val replaceButton = Button(context)
+    private val writeTab = Button(context)
+    private val resultTab = Button(context)
+    private val writePanel = LinearLayout(context)
+    private val resultPanel = LinearLayout(context)
+    private var hasResult = false
     private val localModel = LocalOnDeviceModel(context)
 
     init {
@@ -53,7 +59,7 @@ class CorrectionScreen(
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(22), dp(20), dp(32))
+            setPadding(dp(20), dp(40), dp(20), dp(32))
         }
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
@@ -62,9 +68,8 @@ class CorrectionScreen(
             gravity = Gravity.CENTER_VERTICAL
         }
         val appMark = ImageView(context).apply {
-            setImageResource(R.drawable.ic_launcher_foreground)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = rounded(Color.rgb(18, 61, 50), dp(15))
+            setImageResource(R.drawable.ic_clearwrite_mark)
+            setPadding(dp(1), dp(1), dp(1), dp(1))
             contentDescription = "ClearWrite logo"
         }
         header.addView(appMark, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -83,7 +88,29 @@ class CorrectionScreen(
         })
         content.addView(header)
 
-        content.addView(label(if (canReplaceSelection) "Selected text" else "Your text", 16f, true), matchWidth().withTopMargin(26))
+        writePanel.orientation = LinearLayout.VERTICAL
+        resultPanel.orientation = LinearLayout.VERTICAL
+        val tabs = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(Color.rgb(230, 238, 232), dp(14))
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+        writeTab.text = "Write"
+        resultTab.text = "Result"
+        writeTab.isAllCaps = false
+        resultTab.isAllCaps = false
+        styleTab(writeTab, selected = true)
+        styleTab(resultTab, selected = false)
+        listOf(writeTab, resultTab).forEach { tab ->
+            tab.setOnClickListener { showResultTab(tab === resultTab) }
+            tabs.addView(tab, LinearLayout.LayoutParams(0, dp(42), 1f))
+        }
+        content.addView(tabs, matchWidth().withTopMargin(18))
+        content.addView(writePanel, matchWidth().withTopMargin(10))
+        content.addView(resultPanel, matchWidth().withTopMargin(10))
+        showResultTab(false)
+
+        writePanel.addView(label(if (canReplaceSelection) "Selected text" else "Your text", 16f, true), matchWidth().withTopMargin(14))
         input.apply {
             hint = "Type or paste your text here…"
             setText(initialText)
@@ -99,8 +126,8 @@ class CorrectionScreen(
             setTextColor(ink)
             setHintTextColor(Color.rgb(150, 163, 155))
         }
-        content.addView(input, matchWidth().withTopMargin(10))
-        content.addView(inputCount, matchWidth().withTopMargin(7))
+        writePanel.addView(input, matchWidth().withTopMargin(10))
+        writePanel.addView(inputCount, matchWidth().withTopMargin(7))
         inputCount.textSize = 13f
         inputCount.gravity = Gravity.END
         inputCount.setTextColor(mutedInk)
@@ -108,9 +135,9 @@ class CorrectionScreen(
         fixButton.text = "Fix grammar"
         fixButton.isAllCaps = false
         styleButton(fixButton, primaryGreen, Color.WHITE)
-        content.addView(fixButton, matchWidth().withTopMargin(15).apply { height = dp(54) })
+        writePanel.addView(fixButton, matchWidth().withTopMargin(15).apply { height = dp(54) })
         progress.visibility = View.GONE
-        content.addView(progress, LinearLayout.LayoutParams(dp(32), dp(32)).apply {
+        writePanel.addView(progress, LinearLayout.LayoutParams(dp(32), dp(32)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             topMargin = dp(8)
         })
@@ -118,9 +145,9 @@ class CorrectionScreen(
         status.textSize = 14f
         status.setTextColor(0xFF43506A.toInt())
         status.visibility = View.GONE
-        content.addView(status, matchWidth().withTopMargin(8))
+        writePanel.addView(status, matchWidth().withTopMargin(8))
 
-        content.addView(label("Corrected text", 16f, true), matchWidth().withTopMargin(24))
+        resultPanel.addView(label("Corrected text", 16f, true))
         val changeLegend = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -137,7 +164,7 @@ class CorrectionScreen(
                 marginStart = dp(7)
             }
         )
-        content.addView(changeLegend, matchWidth().withTopMargin(6))
+        resultPanel.addView(changeLegend, matchWidth().withTopMargin(6))
         output.apply {
             textSize = 17f
             setTextColor(ink)
@@ -148,8 +175,8 @@ class CorrectionScreen(
             minHeight = dp(100)
             text = "Corrected text will appear here."
         }
-        content.addView(output, matchWidth().withTopMargin(8))
-        content.addView(outputCount, matchWidth().withTopMargin(6))
+        resultPanel.addView(output, matchWidth().withTopMargin(8))
+        resultPanel.addView(outputCount, matchWidth().withTopMargin(6))
         outputCount.textSize = 13f
         outputCount.gravity = Gravity.END
         outputCount.setTextColor(mutedInk)
@@ -172,13 +199,13 @@ class CorrectionScreen(
             actions.addView(replaceButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply {
                 marginStart = dp(10)
             })
-            content.addView(actions, matchWidth().withTopMargin(14))
+            resultPanel.addView(actions, matchWidth().withTopMargin(14))
             replaceButton.setOnClickListener {
                 val corrected = output.text.toString()
                 if (copyButton.isEnabled && corrected.isNotBlank()) onReplaceSelection(corrected)
             }
         } else {
-            content.addView(copyButton, matchWidth().withTopMargin(14).apply { height = dp(50) })
+            resultPanel.addView(copyButton, matchWidth().withTopMargin(14).apply { height = dp(50) })
         }
 
         content.addView(localModel.webView, LinearLayout.LayoutParams(dp(1), dp(1)))
@@ -202,6 +229,9 @@ class CorrectionScreen(
         }
 
         fixButton.setOnClickListener { runCorrection() }
+        if (autoCorrectOnOpen) {
+            post { runCorrection() }
+        }
     }
 
     private fun runCorrection() {
@@ -244,11 +274,17 @@ class CorrectionScreen(
                     replaceButton.isEnabled = corrected.isNotBlank()
                     replaceButton.alpha = if (replaceButton.isEnabled) 1f else 0.55f
                 }
+                hasResult = corrected.isNotBlank()
+                resultTab.isEnabled = hasResult
+                showResultTab(hasResult)
                 showStatus("Grammar check complete.", error = false)
             } catch (failure: Throwable) {
                 // Surface linkage/runtime failures too; the old selection action hid them.
                 output.text = ""
                 outputCount.text = "Words: 0  ·  Characters: 0  ·  Time: —"
+                hasResult = false
+                resultTab.isEnabled = false
+                showResultTab(false)
                 showStatus(
                     "Grammar check failed: ${failure.message ?: failure.javaClass.simpleName}",
                     error = true
@@ -263,6 +299,26 @@ class CorrectionScreen(
     }
 
     fun close() = localModel.close()
+
+    private fun showResultTab(showResult: Boolean) {
+        val show = showResult && hasResult
+        writePanel.visibility = if (show) View.GONE else View.VISIBLE
+        resultPanel.visibility = if (show) View.VISIBLE else View.GONE
+        styleTab(writeTab, selected = !show)
+        styleTab(resultTab, selected = show)
+    }
+
+    private fun styleTab(button: Button, selected: Boolean) {
+        button.background = rounded(
+            if (selected) Color.WHITE else Color.TRANSPARENT,
+            dp(11)
+        )
+        button.setTextColor(if (selected) primaryGreen else mutedInk)
+        button.textSize = 14f
+        button.setTypeface(button.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+        button.isEnabled = selected || hasResult
+        button.alpha = if (button.isEnabled) 1f else 0.55f
+    }
 
     private fun showStatus(message: String, error: Boolean) {
         status.text = message

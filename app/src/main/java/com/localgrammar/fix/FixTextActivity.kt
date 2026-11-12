@@ -31,6 +31,7 @@ class FixTextActivity : AppCompatActivity() {
             scope = lifecycleScope,
             initialText = selectedText,
             canReplaceSelection = canReplace,
+            autoCorrectOnOpen = true,
             onReplaceSelection = { corrected ->
                 setResult(Activity.RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, corrected))
                 finish()

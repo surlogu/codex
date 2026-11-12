@@ -1,21 +1,28 @@
-# ClearWrite
+# ClearWrite AI (Qwen branch)
 
-An offline Android grammar editor with a **Fix grammar** text-selection action for Gboard and other keyboards. Type or paste text in the app, or select text in another app and choose **Fix grammar**. Corrected words are highlighted in green; the app also shows word and character counts and correction time. Copy the result or return it to the selected field when supported.
+This branch builds a separate, offline writing app named **ClearWrite AI**. The compact **ClearWrite** grammar app remains on the `offline-grammar-fix` branch, so both apps can be installed side by side.
 
-The main corrector is a bundled T5-Efficient-MINI model trained for English grammar correction with additional typo noise. Its ONNX weights are quantized; inference runs locally with ONNX Runtime WebAssembly. LanguageTool's bundled English rules provide a second correction signal. Before showing a result, the app checks that the model has not dropped negation or replaced too much of the input's key content. These safeguards reduce meaning changes, but no grammar model can guarantee perfect results for every sentence. The app does not request Internet permission, so correction works offline after installation.
+## Features
+
+- Run grammar and spelling correction, rephrase, shorten, or expand text with Qwen2.5-0.5B-Instruct.
+- Open the grammar correction screen from Android's selected-text action; correction starts automatically and can replace the selected text when the source app allows it.
+- See the result in its own tab with changed text highlighted, word/character counts, elapsed time, copy, and replace actions.
+- Keep inference on the device. The app has no network permission and does not send text to a service.
+
+## Model and device requirements
+
+The Qwen2.5-0.5B-Instruct Q4_K_M GGUF weights are bundled in the APK (491,400,032 bytes). The first run copies the bundled model into app storage and loads it; the phone needs roughly 1 GB of free space for the APK and extracted model together. Inference uses llama.cpp on the ARM64 CPU. The build targets Android 8.0+ arm64 phones; x86 emulator builds are not included. Speed and output quality depend on the phone. A small model can make mistakes, so review important writing.
+
+Model: [Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF), Apache-2.0. llama.cpp source is included under `app/src/main/cpp/llama.cpp` and retains its upstream MIT license.
 
 ## Build
 
-Open this project in Android Studio, or run `./gradlew assembleDebug` after installing Android SDK platform 35 and build tools.
+Use JDK 17 and Android SDK 35, then run:
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The checked-in APK is at `output/OfflineGrammarFix.apk`.
+```sh
+./gradlew assembleDebug
+```
 
-## Use
+APK output: `output/ClearWriteAI-Qwen.apk`.
 
-Install the APK and either enter text in the app and tap **Fix Grammar**, or select editable English text in another app and choose **Fix grammar** in the selection toolbar (or its overflow menu). The selection action opens the app with the selected text filled in; after correction, choose **Replace selected text** or **Copy corrected text**.
-
-Some host apps do not support text replacement or expose the selected text as read-only.
-
-## License
-
-Application source: MIT. The T5-Efficient-MINI grammar model is MIT licensed; model attribution is in `app/src/main/assets/models/grammar-t5-efficient-mini/MODEL_NOTICE.txt`. Transformers.js is Apache-2.0. ONNX Runtime Web is MIT. The LanguageTool fallback is LGPL-2.1; its bundled language resources may carry separate notices. See https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+The default build uses the bundled ARM64 native runtime. To rebuild that runtime from the included llama.cpp sources, install NDK `28.2.13676358` and CMake `3.31.6`, then run `./gradlew -PcompileLlama=true assembleDebug`.

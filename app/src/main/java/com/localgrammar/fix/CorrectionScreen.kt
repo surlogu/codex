@@ -22,9 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.LifecycleCoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class CorrectionScreen(
     context: Context,
@@ -46,6 +44,9 @@ class CorrectionScreen(
     private val fixButton = Button(context)
     private val copyButton = Button(context)
     private val replaceButton = Button(context)
+    private val resultHeading = TextView(context)
+    private val modeButtons = mutableMapOf<WritingMode, Button>()
+    private var currentMode = WritingMode.GRAMMAR
     private val writeTab = Button(context)
     private val resultTab = Button(context)
     private val writePanel = LinearLayout(context)
@@ -74,11 +75,11 @@ class CorrectionScreen(
         }
         header.addView(appMark, LinearLayout.LayoutParams(dp(48), dp(48)))
         val titleBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        titleBlock.addView(label("ClearWrite", 24f, true))
+        titleBlock.addView(label("ClearWrite AI", 24f, true))
         titleBlock.addView(
             label(
                 if (canReplaceSelection) "Fix selected text privately"
-                else "Private, offline grammar correction",
+                else "Private, offline Qwen writing",
                 13f
             ).apply { setTextColor(mutedInk) },
             matchWidth().withTopMargin(2)
@@ -111,6 +112,28 @@ class CorrectionScreen(
         showResultTab(false)
 
         writePanel.addView(label(if (canReplaceSelection) "Selected text" else "Your text", 16f, true), matchWidth().withTopMargin(14))
+        if (!canReplaceSelection) {
+            val modePicker = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            WritingMode.entries.forEach { mode ->
+                val modeButton = Button(context).apply {
+                    text = mode.name.lowercase().replaceFirstChar { it.uppercase() }
+                    isAllCaps = false
+                    textSize = 12f
+                    minHeight = dp(40)
+                    setPadding(dp(5), 0, dp(5), 0)
+                    setOnClickListener { selectMode(mode) }
+                }
+                modeButtons[mode] = modeButton
+                modePicker.addView(modeButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                    if (mode != WritingMode.GRAMMAR) marginStart = dp(4)
+                })
+            }
+            writePanel.addView(modePicker, matchWidth().withTopMargin(9))
+            updateModeButtons()
+        }
         input.apply {
             hint = "Type or paste your text here…"
             setText(initialText)
@@ -147,7 +170,13 @@ class CorrectionScreen(
         status.visibility = View.GONE
         writePanel.addView(status, matchWidth().withTopMargin(8))
 
-        resultPanel.addView(label("Corrected text", 16f, true))
+        resultHeading.apply {
+            text = "Corrected text"
+            textSize = 16f
+            setTextColor(ink)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        resultPanel.addView(resultHeading)
         val changeLegend = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -208,9 +237,6 @@ class CorrectionScreen(
             resultPanel.addView(copyButton, matchWidth().withTopMargin(14).apply { height = dp(50) })
         }
 
-        content.addView(localModel.webView, LinearLayout.LayoutParams(dp(1), dp(1)))
-        localModel.start()
-
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -240,12 +266,14 @@ class CorrectionScreen(
             showStatus("Enter or paste text first.", error = true)
             return
         }
+        val mode = currentMode
 
         fixButton.isEnabled = false
-        fixButton.text = "Fixing…"
+        fixButton.text = "Working…"
         fixButton.alpha = 0.75f
+        modeButtons.values.forEach { it.isEnabled = false }
         progress.visibility = View.VISIBLE
-        showStatus("Running the offline grammar model…", error = false)
+        showStatus("Preparing the offline writing model…", error = false)
         copyButton.isEnabled = false
         copyButton.alpha = 0.55f
         if (canReplaceSelection) {
@@ -258,15 +286,13 @@ class CorrectionScreen(
 
         scope.launch {
             try {
-                val modelCorrected = localModel.correct(text) { message ->
+                val modelCorrected = localModel.correct(text, mode) { message ->
                     post { showStatus(message, error = false) }
                 }
-                val localRulesCorrection = withContext(Dispatchers.IO) {
-                    runCatching { LocalGrammarCorrector.correct(text) }.getOrNull()
-                }
-                val corrected = chooseCorrection(text, modelCorrected, localRulesCorrection)
+                val corrected = modelCorrected.ifBlank { text }
                 val elapsedSeconds = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
                 output.text = highlightCorrections(text, corrected)
+                resultHeading.text = mode.resultLabel
                 outputCount.text = "${counts(corrected)}  ·  Time: ${"%.2f".format(java.util.Locale.US, elapsedSeconds)} s"
                 copyButton.isEnabled = corrected.isNotBlank()
                 copyButton.alpha = if (copyButton.isEnabled) 1f else 0.55f
@@ -277,7 +303,7 @@ class CorrectionScreen(
                 hasResult = corrected.isNotBlank()
                 resultTab.isEnabled = hasResult
                 showResultTab(hasResult)
-                showStatus("Grammar check complete.", error = false)
+                showStatus("${mode.resultLabel}.", error = false)
             } catch (failure: Throwable) {
                 // Surface linkage/runtime failures too; the old selection action hid them.
                 output.text = ""
@@ -286,19 +312,40 @@ class CorrectionScreen(
                 resultTab.isEnabled = false
                 showResultTab(false)
                 showStatus(
-                    "Grammar check failed: ${failure.message ?: failure.javaClass.simpleName}",
+                    "Writing task failed: ${failure.message ?: failure.javaClass.simpleName}",
                     error = true
                 )
             } finally {
                 fixButton.isEnabled = true
-                fixButton.text = "Fix grammar"
+                fixButton.text = currentMode.actionText
                 fixButton.alpha = 1f
+                modeButtons.values.forEach { it.isEnabled = true }
                 progress.visibility = View.GONE
             }
         }
     }
 
     fun close() = localModel.close()
+
+    private fun selectMode(mode: WritingMode) {
+        currentMode = mode
+        fixButton.text = mode.actionText
+        updateModeButtons()
+    }
+
+    private fun updateModeButtons() {
+        modeButtons.forEach { (mode, button) ->
+            val selected = mode == currentMode
+            button.background = rounded(
+                if (selected) primaryGreen else Color.WHITE,
+                dp(11),
+                if (selected) primaryGreen else Color.rgb(224, 234, 227),
+                dp(1)
+            )
+            button.setTextColor(if (selected) Color.WHITE else mutedInk)
+            button.setTypeface(button.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+        }
+    }
 
     private fun showResultTab(showResult: Boolean) {
         val show = showResult && hasResult
@@ -346,93 +393,6 @@ class CorrectionScreen(
         button.minHeight = dp(48)
         button.setPadding(dp(14), 0, dp(14), 0)
         button.elevation = dp(1).toFloat()
-    }
-
-    private fun chooseCorrection(input: String, modelText: String, rulesText: String?): String {
-        if (modelText.isBlank()) return input
-        val rules = rulesText?.takeIf { it.isNotBlank() } ?: input
-        val fallback = if (rules != input) rules else input
-        val modelHasSamePolarity = negationCount(input) == negationCount(modelText)
-        if (!modelHasSamePolarity) return fallback
-
-        val sourceContent = contentWords(input)
-        if (sourceContent.isNotEmpty()) {
-            val correctedContent = contentWords(modelText)
-            val preserved = sourceContent.count { source ->
-                correctedContent.any { corrected -> sameContentWord(source, corrected) }
-            }
-            if (preserved.toDouble() / sourceContent.size < 0.60) {
-                return fallback
-            }
-        }
-
-        val inputWords = input.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        val modelWords = modelText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        val rulesWords = rules.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        // Reject a short-input rewrite that changes the question or adds unrelated content.
-        if (inputWords <= 8 && modelWords > 5 && modelWords > inputWords * 1.6 + 1) {
-            return fallback
-        }
-        // Keep short spelling fixes when the model adds unnecessary wording.
-        return if (rules != input && modelWords > rulesWords * 1.5) rules else modelText
-    }
-
-    private fun negationCount(text: String): Int = Regex(
-        "(?i)\\b(?:not|no|never|neither|nor|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|can't|couldn't|won't|wouldn't|shouldn't|mustn't)\\b"
-    ).findAll(text).count()
-
-    private fun contentWords(text: String): Set<String> {
-        val commonWords = setOf(
-            "a", "an", "the", "i", "me", "my", "mine", "we", "us", "our", "ours",
-            "you", "your", "yours", "he", "him", "his", "she", "her", "hers", "it",
-            "its", "they", "them", "their", "theirs", "this", "that", "these", "those",
-            "am", "is", "are", "was", "were", "be", "been", "being", "do", "does",
-            "did", "have", "has", "had", "will", "would", "can", "could", "should",
-            "may", "might", "must", "to", "of", "in", "on", "at", "for", "from",
-            "by", "with", "as", "and", "but", "or", "if", "than", "then", "when",
-            "where", "who", "which", "what", "how", "there", "here", "not", "never",
-            "neither", "nor", "don't", "doesn't", "didn't", "isn't", "aren't", "wasn't",
-            "weren't", "can't", "couldn't", "won't", "wouldn't", "shouldn't", "mustn't"
-        )
-        return Regex("[\\p{L}\\p{N}]+(?:['’][\\p{L}\\p{N}]+)?")
-            .findAll(text.lowercase(java.util.Locale.US))
-            .map { it.value.replace('’', '\'') }
-            .filterNot { it in commonWords }
-            .map { word ->
-                when {
-                    word.length > 5 && word.endsWith("ing") -> word.dropLast(3)
-                    word.length > 4 && word.endsWith("ed") -> word.dropLast(2)
-                    word.length > 4 && word.endsWith("s") -> word.dropLast(1)
-                    else -> word
-                }
-            }
-            .toSet()
-    }
-
-    /** Treat a small spelling edit as the same content word, e.g. "leter" -> "letter". */
-    private fun sameContentWord(source: String, corrected: String): Boolean {
-        if (source == corrected) return true
-        val longest = maxOf(source.length, corrected.length)
-        if (longest < 4 || kotlin.math.abs(source.length - corrected.length) > 1) return false
-        val allowedDistance = if (longest > 8) 2 else 1
-        var previous = IntArray(corrected.length + 1) { it }
-        for (i in source.indices) {
-            val current = IntArray(corrected.length + 1)
-            current[0] = i + 1
-            var rowMinimum = current[0]
-            for (j in corrected.indices) {
-                val cost = if (source[i] == corrected[j]) 0 else 1
-                current[j + 1] = minOf(
-                    current[j] + 1,
-                    previous[j + 1] + 1,
-                    previous[j] + cost
-                )
-                rowMinimum = minOf(rowMinimum, current[j + 1])
-            }
-            if (rowMinimum > allowedDistance) return false
-            previous = current
-        }
-        return previous[corrected.length] <= allowedDistance
     }
 
     private fun label(value: String, size: Float, bold: Boolean = false) = TextView(context).apply {

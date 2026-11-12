@@ -1,0 +1,5 @@
+Model: Qwen2.5-0.5B-Instruct, Q4_K_M GGUF quantization
+Source: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+File: qwen2.5-0.5b-instruct-q4_k_m.gguf
+License: Apache-2.0 (see LICENSE)
+Inference: llama.cpp, entirely on-device. No user text is transmitted.

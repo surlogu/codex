@@ -1,6 +1,0 @@
-Model: T5-Efficient-MINI for English grammar correction
-Model source: https://huggingface.co/visheratin/t5-efficient-mini-grammar-correction
-Model revision: 034fd4276852e7da609156fea0ff448459e602df
-Weights and model card license: MIT
-
-The encoder, initial decoder, and cached decoder use quantized ONNX weights. The model runs entirely on this device using ONNX Runtime WebAssembly. It was trained for English grammar correction with additional typo noise. No text is sent to a server.

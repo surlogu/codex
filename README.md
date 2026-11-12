@@ -1,6 +1,6 @@
-# Offline Grammar Fix
+# ClearWrite
 
-An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported.
+An offline Android grammar editor with a **Fix grammar** text-selection action for Gboard and other keyboards. Type or paste text in the app, or select text in another app and choose **Fix grammar**. Corrected words are highlighted in green; the app also shows word and character counts and correction time. Copy the result or return it to the selected field when supported.
 
 The main corrector is a bundled T5-Efficient-MINI model trained for English grammar correction with additional typo noise. Its ONNX weights are quantized; inference runs locally with ONNX Runtime WebAssembly. LanguageTool's bundled English rules provide a second correction signal. Before showing a result, the app checks that the model has not dropped negation or replaced too much of the input's key content. These safeguards reduce meaning changes, but no grammar model can guarantee perfect results for every sentence. The app does not request Internet permission, so correction works offline after installation.
 

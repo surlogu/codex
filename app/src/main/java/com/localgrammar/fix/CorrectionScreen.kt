@@ -51,10 +51,17 @@ class CorrectionScreen(
         }
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
-        content.addView(label(if (canReplaceSelection) "Fix selected text" else "Offline Grammar Fix", 24f, true))
-        content.addView(label("T5-Efficient-MINI typo-aware offline model · text stays on this device", 14f), matchWidth().withTopMargin(4))
+        content.addView(label("ClearWrite", 26f, true))
+        content.addView(
+            label(
+                if (canReplaceSelection) "Review the text you selected in another app."
+                else "Private grammar correction that works offline.",
+                14f
+            ),
+            matchWidth().withTopMargin(4)
+        )
 
-        content.addView(label("Text to correct", 16f, true), matchWidth().withTopMargin(24))
+        content.addView(label(if (canReplaceSelection) "Selected text" else "Text to correct", 16f, true), matchWidth().withTopMargin(24))
         input.apply {
             hint = "Type or paste text here"
             setText(initialText)
@@ -88,6 +95,23 @@ class CorrectionScreen(
         content.addView(status, matchWidth().withTopMargin(8))
 
         content.addView(label("Corrected text", 16f, true), matchWidth().withTopMargin(22))
+        val changeLegend = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val legendSwatch = View(context).apply {
+            setBackgroundColor(0xFFDAF6E2.toInt())
+        }
+        changeLegend.addView(legendSwatch, LinearLayout.LayoutParams(dp(14), dp(14)))
+        changeLegend.addView(
+            label("Green highlights show what changed", 12f).apply {
+                setTextColor(0xFF596274.toInt())
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(7)
+            }
+        )
+        content.addView(changeLegend, matchWidth().withTopMargin(6))
         output.apply {
             textSize = 16f
             setTextColor(0xFF1D2638.toInt())
@@ -169,7 +193,7 @@ class CorrectionScreen(
                 }
                 val corrected = chooseCorrection(text, modelCorrected, localRulesCorrection)
                 val elapsedSeconds = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
-                output.text = corrected
+                output.text = highlightCorrections(text, corrected)
                 outputCount.text = "${counts(corrected)}  ·  Time: ${"%.2f".format(java.util.Locale.US, elapsedSeconds)} s"
                 copyButton.isEnabled = corrected.isNotBlank()
                 if (canReplaceSelection) replaceButton.isEnabled = corrected.isNotBlank()

@@ -25,6 +25,9 @@ interface InferenceEngine {
      */
     suspend fun setSystemPrompt(systemPrompt: String)
 
+    /** Set deterministic/creative sampling temperature for the next response. */
+    suspend fun setTemperature(temperature: Float)
+
     /**
      * Sends a user prompt to the loaded model and returns a Flow of generated tokens.
      */

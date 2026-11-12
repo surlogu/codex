@@ -16,6 +16,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -45,13 +46,20 @@ class CorrectionScreen(
     private val copyButton = Button(context)
     private val replaceButton = Button(context)
     private val resultHeading = TextView(context)
-    private val modeButtons = mutableMapOf<WritingMode, Button>()
-    private var currentMode = WritingMode.GRAMMAR
+    private val promptStore = PromptConfigurationStore(context)
+    private var profiles = promptStore.profiles()
+    private var currentProfile = profiles.firstOrNull {
+        it.id == if (canReplaceSelection) "grammar" else promptStore.selectedProfileId()
+    }
+        ?: profiles.first { it.id == "grammar" }
+    private val modeButtons = mutableMapOf<String, Button>()
+    private val modePicker = LinearLayout(context)
     private val writeTab = Button(context)
     private val resultTab = Button(context)
     private val writePanel = LinearLayout(context)
     private val resultPanel = LinearLayout(context)
     private var hasResult = false
+    private var activeTab = ContentTab.WRITE
     private val localModel = LocalOnDeviceModel(context)
 
     init {
@@ -87,6 +95,31 @@ class CorrectionScreen(
         header.addView(titleBlock, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = dp(12)
         })
+        if (!canReplaceSelection) {
+            val promptSettingsButton = Button(context).apply {
+                text = "Prompts"
+                isAllCaps = false
+                textSize = 12f
+                minHeight = dp(42)
+                setPadding(dp(8), 0, dp(8), 0)
+                background = rounded(Color.WHITE, dp(12), Color.rgb(217, 230, 220), dp(1))
+                setTextColor(primaryGreen)
+                setOnClickListener {
+                    PromptManagerDialog(context, promptStore) { updatedProfiles ->
+                        profiles = updatedProfiles.toMutableList()
+                        currentProfile = profiles.firstOrNull { it.id == currentProfile.id }
+                            ?: profiles.first { it.id == "grammar" }
+                        promptStore.saveSelectedProfile(currentProfile.id)
+                        updateModeButtons()
+                        fixButton.text = actionText(currentProfile)
+                    }.show()
+                }
+            }
+            header.addView(promptSettingsButton, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(42)
+            ))
+        }
         content.addView(header)
 
         writePanel.orientation = LinearLayout.VERTICAL
@@ -113,25 +146,15 @@ class CorrectionScreen(
 
         writePanel.addView(label(if (canReplaceSelection) "Selected text" else "Your text", 16f, true), matchWidth().withTopMargin(14))
         if (!canReplaceSelection) {
-            val modePicker = LinearLayout(context).apply {
+            modePicker.apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            WritingMode.entries.forEach { mode ->
-                val modeButton = Button(context).apply {
-                    text = mode.name.lowercase().replaceFirstChar { it.uppercase() }
-                    isAllCaps = false
-                    textSize = 12f
-                    minHeight = dp(40)
-                    setPadding(dp(5), 0, dp(5), 0)
-                    setOnClickListener { selectMode(mode) }
-                }
-                modeButtons[mode] = modeButton
-                modePicker.addView(modeButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
-                    if (mode != WritingMode.GRAMMAR) marginStart = dp(4)
-                })
+            val modeScroll = HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(modePicker, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
             }
-            writePanel.addView(modePicker, matchWidth().withTopMargin(9))
+            writePanel.addView(modeScroll, matchWidth().withTopMargin(9))
             updateModeButtons()
         }
         input.apply {
@@ -155,7 +178,7 @@ class CorrectionScreen(
         inputCount.gravity = Gravity.END
         inputCount.setTextColor(mutedInk)
 
-        fixButton.text = "Fix grammar"
+        fixButton.text = actionText(currentProfile)
         fixButton.isAllCaps = false
         styleButton(fixButton, primaryGreen, Color.WHITE)
         writePanel.addView(fixButton, matchWidth().withTopMargin(15).apply { height = dp(54) })
@@ -266,7 +289,7 @@ class CorrectionScreen(
             showStatus("Enter or paste text first.", error = true)
             return
         }
-        val mode = currentMode
+        val mode = currentProfile
 
         fixButton.isEnabled = false
         fixButton.text = "Working…"
@@ -286,13 +309,18 @@ class CorrectionScreen(
 
         scope.launch {
             try {
-                val modelCorrected = localModel.correct(text, mode) { message ->
+                val modelCorrected = localModel.correct(
+                    text = text,
+                    profile = mode,
+                    masterPrompt = promptStore.masterPrompt(),
+                    temperature = promptStore.temperature()
+                ) { message ->
                     post { showStatus(message, error = false) }
                 }
                 val corrected = modelCorrected.ifBlank { text }
                 val elapsedSeconds = (SystemClock.elapsedRealtime() - startedAt) / 1000.0
                 output.text = highlightCorrections(text, corrected)
-                resultHeading.text = mode.resultLabel
+                resultHeading.text = resultTitle(mode)
                 outputCount.text = "${counts(corrected)}  ·  Time: ${"%.2f".format(java.util.Locale.US, elapsedSeconds)} s"
                 copyButton.isEnabled = corrected.isNotBlank()
                 copyButton.alpha = if (copyButton.isEnabled) 1f else 0.55f
@@ -303,7 +331,7 @@ class CorrectionScreen(
                 hasResult = corrected.isNotBlank()
                 resultTab.isEnabled = hasResult
                 showResultTab(hasResult)
-                showStatus("${mode.resultLabel}.", error = false)
+                showStatus("${resultTitle(mode)}.", error = false)
             } catch (failure: Throwable) {
                 // Surface linkage/runtime failures too; the old selection action hid them.
                 output.text = ""
@@ -317,7 +345,7 @@ class CorrectionScreen(
                 )
             } finally {
                 fixButton.isEnabled = true
-                fixButton.text = currentMode.actionText
+                fixButton.text = actionText(currentProfile)
                 fixButton.alpha = 1f
                 modeButtons.values.forEach { it.isEnabled = true }
                 progress.visibility = View.GONE
@@ -327,15 +355,34 @@ class CorrectionScreen(
 
     fun close() = localModel.close()
 
-    private fun selectMode(mode: WritingMode) {
-        currentMode = mode
-        fixButton.text = mode.actionText
+    private fun selectMode(profile: PromptProfile) {
+        currentProfile = profile
+        promptStore.saveSelectedProfile(profile.id)
+        fixButton.text = actionText(profile)
         updateModeButtons()
     }
 
     private fun updateModeButtons() {
-        modeButtons.forEach { (mode, button) ->
-            val selected = mode == currentMode
+        modePicker.removeAllViews()
+        modeButtons.clear()
+        profiles.forEach { profile ->
+            val button = Button(context).apply {
+                text = profile.title
+                isAllCaps = false
+                textSize = 12f
+                minHeight = dp(40)
+                minWidth = dp(76)
+                setPadding(dp(9), 0, dp(9), 0)
+                setOnClickListener { selectMode(profile) }
+            }
+            modeButtons[profile.id] = button
+            modePicker.addView(button, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(42)
+            ).apply {
+                if (modePicker.childCount > 0) marginStart = dp(5)
+            })
+            val selected = profile.id == currentProfile.id
             button.background = rounded(
                 if (selected) primaryGreen else Color.WHITE,
                 dp(11),
@@ -349,11 +396,24 @@ class CorrectionScreen(
 
     private fun showResultTab(showResult: Boolean) {
         val show = showResult && hasResult
+        activeTab = if (show) ContentTab.RESULT else ContentTab.WRITE
         writePanel.visibility = if (show) View.GONE else View.VISIBLE
         resultPanel.visibility = if (show) View.VISIBLE else View.GONE
-        styleTab(writeTab, selected = !show)
-        styleTab(resultTab, selected = show)
+        styleTab(writeTab, selected = activeTab == ContentTab.WRITE)
+        styleTab(resultTab, selected = activeTab == ContentTab.RESULT)
+        if (show) post { scrollTo(0, 0) }
     }
+
+    private fun actionText(profile: PromptProfile): String = when (profile.id) {
+        "grammar" -> "Fix grammar"
+        "rephrase" -> "Rephrase"
+        "shorter" -> "Make shorter"
+        "longer" -> "Make longer"
+        else -> "Run ${profile.title}"
+    }
+
+    private fun resultTitle(profile: PromptProfile): String =
+        if (profile.id == "grammar") "Corrected text" else "${profile.title} result"
 
     private fun styleTab(button: Button, selected: Boolean) {
         button.background = rounded(
@@ -410,4 +470,6 @@ class CorrectionScreen(
     private fun LinearLayout.LayoutParams.withTopMargin(margin: Int) = apply { topMargin = dp(margin) }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private enum class ContentTab { WRITE, RESULT }
 }

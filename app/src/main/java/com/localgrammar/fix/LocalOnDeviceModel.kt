@@ -20,7 +20,13 @@ class LocalOnDeviceModel(context: Context) {
     private val engine by lazy { AiChat.getInferenceEngine(appContext) }
     private val inferenceLock = Mutex()
 
-    suspend fun correct(text: String, mode: WritingMode, onProgress: (String) -> Unit): String =
+    suspend fun correct(
+        text: String,
+        profile: PromptProfile,
+        masterPrompt: String,
+        temperature: Float,
+        onProgress: (String) -> Unit
+    ): String =
         inferenceLock.withLock {
             val modelFile = ensureModelFile(onProgress)
             awaitEngineReady()
@@ -30,25 +36,13 @@ class LocalOnDeviceModel(context: Context) {
             }
 
             onProgress("Preparing the writing task…")
-            engine.setSystemPrompt(
-                "You are a precise English writing assistant for everyday messages and emails. " +
-                    "Follow the user's requested editing task. Preserve the original meaning, facts, " +
-                    "names, and intent. Do not answer the text or invent details. Return only the " +
-                    "finished text, with no explanation, heading, quotation marks, or markdown. " +
-                    "If the input is already good, keep it nearly unchanged."
-            )
-
-            val instruction = when (mode) {
-                WritingMode.GRAMMAR -> "Correct grammar, spelling, punctuation, and capitalization. Keep the same meaning and tone."
-                WritingMode.REPHRASE -> "Rephrase this naturally and clearly. Keep the same meaning, facts, and approximate length."
-                WritingMode.SHORTER -> "Rewrite this more concisely. Keep every important fact and the original meaning."
-                WritingMode.LONGER -> "Expand this into fluent, complete writing. Do not add facts or assumptions that are not in the input."
-            }
-            val prompt = "$instruction\n\nText to edit:\n<<<\n$text\n>>>\n\nReturn only the edited text."
+            engine.setTemperature(temperature)
+            engine.setSystemPrompt(masterPrompt)
+            val prompt = "${profile.prompt}\n\nUser text or request:\n<<<\n$text\n>>>\n\nReturn only the finished text."
             val answer = StringBuilder()
-            onProgress("${mode.progressLabel} with Qwen…")
+            onProgress("${profile.title} with Qwen…")
             withTimeout(180_000) {
-                engine.sendUserPrompt(prompt, if (mode == WritingMode.LONGER) 384 else 256)
+                engine.sendUserPrompt(prompt, profile.maxTokens)
                     .collect { token -> answer.append(token) }
             }
             answer.toString().trim().removeSurrounding("\"", "\"").ifBlank { text }
@@ -104,9 +98,3 @@ class LocalOnDeviceModel(context: Context) {
     }
 }
 
-enum class WritingMode(val actionText: String, val progressLabel: String, val resultLabel: String) {
-    GRAMMAR("Fix grammar", "Checking grammar", "Grammar fixed"),
-    REPHRASE("Rephrase", "Rephrasing", "Rephrased text"),
-    SHORTER("Shorter", "Shortening", "Shorter text"),
-    LONGER("Longer", "Expanding", "Expanded text")
-}

@@ -400,6 +400,21 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
 
 extern "C"
 JNIEXPORT jint JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_setSamplerTemperature(
+        JNIEnv * /*env*/,
+        jobject /*unused*/,
+        jfloat temperature
+) {
+    if (!g_model || !g_context || temperature < 0.1f || temperature > 1.0f) {
+        return 1;
+    }
+    common_sampler_free(g_sampler);
+    g_sampler = new_sampler(temperature);
+    return g_sampler ? 0 : 1;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
         JNIEnv *env,
         jobject /*unused*/,

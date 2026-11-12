@@ -98,6 +98,9 @@ internal class InferenceEngineImpl private constructor(
     private external fun processSystemPrompt(systemPrompt: String): Int
 
     @FastNative
+    private external fun setSamplerTemperature(temperature: Float): Int
+
+    @FastNative
     private external fun processUserPrompt(userPrompt: String, predictLength: Int): Int
 
     @FastNative
@@ -208,6 +211,17 @@ internal class InferenceEngineImpl private constructor(
             }
             Log.i(TAG, "System prompt processed! Awaiting user prompt...")
             _state.value = InferenceEngine.State.ModelReady
+        }
+
+    override suspend fun setTemperature(temperature: Float) =
+        withContext(llamaDispatcher) {
+            require(temperature in 0.1f..1.0f) { "Temperature must be between 0.1 and 1.0." }
+            check(_state.value is InferenceEngine.State.ModelReady) {
+                "Cannot change temperature in ${_state.value.javaClass.simpleName}."
+            }
+            if (setSamplerTemperature(temperature) != 0) {
+                throw IOException("Could not update the model temperature.")
+            }
         }
 
     /**

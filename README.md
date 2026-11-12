@@ -5,6 +5,7 @@ This branch builds a separate, offline writing app named **ClearWrite AI**. The 
 ## Features
 
 - Run grammar and spelling correction, rephrase, shorten, or expand text with Qwen2.5-0.5B-Instruct.
+- Edit the shared prompt master and each tab's prompt, add custom prompt tabs, set per-tab output length, and adjust model temperature.
 - Open the grammar correction screen from Android's selected-text action; correction starts automatically and can replace the selected text when the source app allows it.
 - See the result in its own tab with changed text highlighted, word/character counts, elapsed time, copy, and replace actions.
 - Keep inference on the device. The app has no network permission and does not send text to a service.

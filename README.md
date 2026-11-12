@@ -2,7 +2,7 @@
 
 An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported.
 
-The main corrector is a bundled T5-Efficient-MINI model trained for English grammar correction with additional typo noise. Its ONNX encoder and initial decoder are quantized; inference runs locally with ONNX Runtime WebAssembly. LanguageTool's bundled English rules provide a second correction signal, and a safeguard rejects short-input rewrites that add unrelated wording. The app does not request Internet permission, so correction works offline after installation.
+The main corrector is a bundled T5-Efficient-MINI model trained for English grammar correction with additional typo noise. Its ONNX weights are quantized; inference runs locally with ONNX Runtime WebAssembly. LanguageTool's bundled English rules provide a second correction signal. Before showing a result, the app checks that the model has not dropped negation or replaced too much of the input's key content. These safeguards reduce meaning changes, but no grammar model can guarantee perfect results for every sentence. The app does not request Internet permission, so correction works offline after installation.
 
 ## Build
 

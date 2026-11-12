@@ -205,16 +205,61 @@ class CorrectionScreen(
 
     private fun chooseCorrection(input: String, modelText: String, rulesText: String?): String {
         if (modelText.isBlank()) return input
-        if (rulesText.isNullOrBlank()) return modelText
+        val rules = rulesText?.takeIf { it.isNotBlank() } ?: input
+        val fallback = if (rules != input) rules else input
+        val modelHasSamePolarity = negationCount(input) == negationCount(modelText)
+        if (!modelHasSamePolarity) return fallback
+
+        val sourceContent = contentWords(input)
+        if (sourceContent.isNotEmpty()) {
+            val correctedContent = contentWords(modelText)
+            val preserved = sourceContent.count { it in correctedContent }
+            if (preserved.toDouble() / sourceContent.size < 0.60) {
+                return fallback
+            }
+        }
+
         val inputWords = input.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         val modelWords = modelText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        val rulesWords = rulesText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+        val rulesWords = rules.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         // Reject a short-input rewrite that changes the question or adds unrelated content.
         if (inputWords <= 8 && modelWords > 5 && modelWords > inputWords * 1.6 + 1) {
-            return if (rulesText != input) rulesText else input
+            return fallback
         }
         // Keep short spelling fixes when the model adds unnecessary wording.
-        return if (rulesText != input && modelWords > rulesWords * 1.5) rulesText else modelText
+        return if (rules != input && modelWords > rulesWords * 1.5) rules else modelText
+    }
+
+    private fun negationCount(text: String): Int = Regex(
+        "(?i)\\b(?:not|no|never|neither|nor|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|can't|couldn't|won't|wouldn't|shouldn't|mustn't)\\b"
+    ).findAll(text).count()
+
+    private fun contentWords(text: String): Set<String> {
+        val commonWords = setOf(
+            "a", "an", "the", "i", "me", "my", "mine", "we", "us", "our", "ours",
+            "you", "your", "yours", "he", "him", "his", "she", "her", "hers", "it",
+            "its", "they", "them", "their", "theirs", "this", "that", "these", "those",
+            "am", "is", "are", "was", "were", "be", "been", "being", "do", "does",
+            "did", "have", "has", "had", "will", "would", "can", "could", "should",
+            "may", "might", "must", "to", "of", "in", "on", "at", "for", "from",
+            "by", "with", "as", "and", "but", "or", "if", "than", "then", "when",
+            "where", "who", "which", "what", "how", "there", "here", "not", "never",
+            "neither", "nor", "don't", "doesn't", "didn't", "isn't", "aren't", "wasn't",
+            "weren't", "can't", "couldn't", "won't", "wouldn't", "shouldn't", "mustn't"
+        )
+        return Regex("[\\p{L}\\p{N}]+(?:['’][\\p{L}\\p{N}]+)?")
+            .findAll(text.lowercase(java.util.Locale.US))
+            .map { it.value.replace('’', '\'') }
+            .filterNot { it in commonWords }
+            .map { word ->
+                when {
+                    word.length > 5 && word.endsWith("ing") -> word.dropLast(3)
+                    word.length > 4 && word.endsWith("ed") -> word.dropLast(2)
+                    word.length > 4 && word.endsWith("s") -> word.dropLast(1)
+                    else -> word
+                }
+            }
+            .toSet()
     }
 
     private fun label(value: String, size: Float, bold: Boolean = false) = TextView(context).apply {

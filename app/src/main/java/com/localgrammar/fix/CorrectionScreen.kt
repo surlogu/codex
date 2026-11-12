@@ -3,7 +3,9 @@ package com.localgrammar.fix
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.text.Editable
 import android.text.InputType
@@ -13,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -30,6 +33,9 @@ class CorrectionScreen(
     private val canReplaceSelection: Boolean = false,
     private val onReplaceSelection: (String) -> Unit = {}
 ) : ScrollView(context) {
+    private val primaryGreen = Color.rgb(22, 112, 76)
+    private val ink = Color.rgb(26, 43, 37)
+    private val mutedInk = Color.rgb(100, 115, 107)
     private val input = EditText(context)
     private val output = TextView(context)
     private val inputCount = TextView(context)
@@ -42,47 +48,67 @@ class CorrectionScreen(
     private val localModel = LocalOnDeviceModel(context)
 
     init {
-        setBackgroundColor(0xFFF7F8FC.toInt())
+        setBackgroundColor(Color.rgb(244, 248, 245))
         isFillViewport = true
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(28), dp(20), dp(32))
+            setPadding(dp(20), dp(22), dp(20), dp(32))
         }
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
-        content.addView(label("ClearWrite", 26f, true))
-        content.addView(
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val appMark = ImageView(context).apply {
+            setImageResource(R.drawable.ic_launcher_foreground)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = rounded(Color.rgb(18, 61, 50), dp(15))
+            contentDescription = "ClearWrite logo"
+        }
+        header.addView(appMark, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val titleBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        titleBlock.addView(label("ClearWrite", 24f, true))
+        titleBlock.addView(
             label(
-                if (canReplaceSelection) "Review the text you selected in another app."
-                else "Private grammar correction that works offline.",
-                14f
-            ),
-            matchWidth().withTopMargin(4)
+                if (canReplaceSelection) "Fix selected text privately"
+                else "Private, offline grammar correction",
+                13f
+            ).apply { setTextColor(mutedInk) },
+            matchWidth().withTopMargin(2)
         )
+        header.addView(titleBlock, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(12)
+        })
+        content.addView(header)
 
-        content.addView(label(if (canReplaceSelection) "Selected text" else "Text to correct", 16f, true), matchWidth().withTopMargin(24))
+        content.addView(label(if (canReplaceSelection) "Selected text" else "Your text", 16f, true), matchWidth().withTopMargin(26))
         input.apply {
-            hint = "Type or paste text here"
+            hint = "Type or paste your text here…"
             setText(initialText)
             gravity = Gravity.TOP or Gravity.START
             minLines = 5
-            maxLines = 10
-            textSize = 16f
+            maxLines = 12
+            textSize = 17f
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(0xFFFFFFFF.toInt())
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+            background = rounded(Color.WHITE, dp(16), Color.rgb(224, 234, 227), dp(1))
+            setTextColor(ink)
+            setHintTextColor(Color.rgb(150, 163, 155))
         }
-        content.addView(input, matchWidth().withTopMargin(8))
-        content.addView(inputCount, matchWidth().withTopMargin(6))
+        content.addView(input, matchWidth().withTopMargin(10))
+        content.addView(inputCount, matchWidth().withTopMargin(7))
         inputCount.textSize = 13f
-        inputCount.setTextColor(0xFF596274.toInt())
+        inputCount.gravity = Gravity.END
+        inputCount.setTextColor(mutedInk)
 
-        fixButton.text = "Fix Grammar"
+        fixButton.text = "Fix grammar"
         fixButton.isAllCaps = false
-        content.addView(fixButton, matchWidth().withTopMargin(14))
+        styleButton(fixButton, primaryGreen, Color.WHITE)
+        content.addView(fixButton, matchWidth().withTopMargin(15).apply { height = dp(54) })
         progress.visibility = View.GONE
         content.addView(progress, LinearLayout.LayoutParams(dp(32), dp(32)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
@@ -94,13 +120,13 @@ class CorrectionScreen(
         status.visibility = View.GONE
         content.addView(status, matchWidth().withTopMargin(8))
 
-        content.addView(label("Corrected text", 16f, true), matchWidth().withTopMargin(22))
+        content.addView(label("Corrected text", 16f, true), matchWidth().withTopMargin(24))
         val changeLegend = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         val legendSwatch = View(context).apply {
-            setBackgroundColor(0xFFDAF6E2.toInt())
+            background = rounded(Color.rgb(218, 246, 226), dp(4))
         }
         changeLegend.addView(legendSwatch, LinearLayout.LayoutParams(dp(14), dp(14)))
         changeLegend.addView(
@@ -113,10 +139,11 @@ class CorrectionScreen(
         )
         content.addView(changeLegend, matchWidth().withTopMargin(6))
         output.apply {
-            textSize = 16f
-            setTextColor(0xFF1D2638.toInt())
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(0xFFFFFFFF.toInt())
+            textSize = 17f
+            setTextColor(ink)
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+            background = rounded(Color.WHITE, dp(16), Color.rgb(224, 234, 227), dp(1))
+            setLineSpacing(dp(3).toFloat(), 1f)
             setTextIsSelectable(true)
             minHeight = dp(100)
             text = "Corrected text will appear here."
@@ -124,23 +151,34 @@ class CorrectionScreen(
         content.addView(output, matchWidth().withTopMargin(8))
         content.addView(outputCount, matchWidth().withTopMargin(6))
         outputCount.textSize = 13f
-        outputCount.setTextColor(0xFF596274.toInt())
+        outputCount.gravity = Gravity.END
+        outputCount.setTextColor(mutedInk)
         outputCount.text = "Words: 0  ·  Characters: 0  ·  Time: —"
 
-        copyButton.text = "Copy corrected text"
+        copyButton.text = "Copy text"
         copyButton.isAllCaps = false
         copyButton.isEnabled = false
-        content.addView(copyButton, matchWidth().withTopMargin(14))
+        copyButton.alpha = 0.55f
+        styleButton(copyButton, Color.WHITE, primaryGreen, primaryGreen)
 
         if (canReplaceSelection) {
-            replaceButton.text = "Replace selected text"
+            replaceButton.text = "Replace text"
             replaceButton.isAllCaps = false
             replaceButton.isEnabled = false
-            content.addView(replaceButton, matchWidth().withTopMargin(8))
+            replaceButton.alpha = 0.55f
+            styleButton(replaceButton, primaryGreen, Color.WHITE)
+            val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            actions.addView(copyButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+            actions.addView(replaceButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+                marginStart = dp(10)
+            })
+            content.addView(actions, matchWidth().withTopMargin(14))
             replaceButton.setOnClickListener {
                 val corrected = output.text.toString()
                 if (copyButton.isEnabled && corrected.isNotBlank()) onReplaceSelection(corrected)
             }
+        } else {
+            content.addView(copyButton, matchWidth().withTopMargin(14).apply { height = dp(50) })
         }
 
         content.addView(localModel.webView, LinearLayout.LayoutParams(dp(1), dp(1)))
@@ -175,10 +213,15 @@ class CorrectionScreen(
 
         fixButton.isEnabled = false
         fixButton.text = "Fixing…"
+        fixButton.alpha = 0.75f
         progress.visibility = View.VISIBLE
         showStatus("Running the offline grammar model…", error = false)
         copyButton.isEnabled = false
-        if (canReplaceSelection) replaceButton.isEnabled = false
+        copyButton.alpha = 0.55f
+        if (canReplaceSelection) {
+            replaceButton.isEnabled = false
+            replaceButton.alpha = 0.55f
+        }
         output.text = ""
         outputCount.text = "Words: 0  ·  Characters: 0  ·  Time: —"
         val startedAt = SystemClock.elapsedRealtime()
@@ -196,7 +239,11 @@ class CorrectionScreen(
                 output.text = highlightCorrections(text, corrected)
                 outputCount.text = "${counts(corrected)}  ·  Time: ${"%.2f".format(java.util.Locale.US, elapsedSeconds)} s"
                 copyButton.isEnabled = corrected.isNotBlank()
-                if (canReplaceSelection) replaceButton.isEnabled = corrected.isNotBlank()
+                copyButton.alpha = if (copyButton.isEnabled) 1f else 0.55f
+                if (canReplaceSelection) {
+                    replaceButton.isEnabled = corrected.isNotBlank()
+                    replaceButton.alpha = if (replaceButton.isEnabled) 1f else 0.55f
+                }
                 showStatus("Grammar check complete.", error = false)
             } catch (failure: Throwable) {
                 // Surface linkage/runtime failures too; the old selection action hid them.
@@ -208,7 +255,8 @@ class CorrectionScreen(
                 )
             } finally {
                 fixButton.isEnabled = true
-                fixButton.text = "Fix Grammar"
+                fixButton.text = "Fix grammar"
+                fixButton.alpha = 1f
                 progress.visibility = View.GONE
             }
         }
@@ -218,13 +266,30 @@ class CorrectionScreen(
 
     private fun showStatus(message: String, error: Boolean) {
         status.text = message
-        status.setTextColor(if (error) 0xFFB42318.toInt() else 0xFF43506A.toInt())
+        status.setTextColor(if (error) 0xFFB42318.toInt() else mutedInk)
         status.visibility = View.VISIBLE
     }
 
     private fun counts(text: String): String {
         val wordCount = text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         return "Words: $wordCount  ·  Characters: ${text.length}"
+    }
+
+    private fun rounded(fillColor: Int, radius: Int, strokeColor: Int? = null, strokeWidth: Int = 0) =
+        GradientDrawable().apply {
+            setColor(fillColor)
+            cornerRadius = radius.toFloat()
+            if (strokeColor != null && strokeWidth > 0) setStroke(strokeWidth, strokeColor)
+        }
+
+    private fun styleButton(button: Button, fillColor: Int, textColor: Int, strokeColor: Int? = null) {
+        button.background = rounded(fillColor, dp(14), strokeColor, if (strokeColor == null) 0 else dp(1))
+        button.setTextColor(textColor)
+        button.textSize = 14f
+        button.setTypeface(button.typeface, Typeface.BOLD)
+        button.minHeight = dp(48)
+        button.setPadding(dp(14), 0, dp(14), 0)
+        button.elevation = dp(1).toFloat()
     }
 
     private fun chooseCorrection(input: String, modelText: String, rulesText: String?): String {

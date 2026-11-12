@@ -19,7 +19,7 @@ internal fun highlightCorrections(original: String, corrected: String): CharSequ
     if (before.isEmpty() || after.isEmpty()) return corrected
 
     // Keep memory bounded for very long pasted documents.
-    if (before.size.toLong() * after.size > 360_000L) return corrected
+    if (before.size.toLong() * after.size > 1_000_000L) return corrected
 
     val lcs = Array(before.size + 1) { IntArray(after.size + 1) }
     for (i in before.indices.reversed()) {

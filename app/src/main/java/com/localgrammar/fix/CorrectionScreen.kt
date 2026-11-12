@@ -213,7 +213,9 @@ class CorrectionScreen(
         val sourceContent = contentWords(input)
         if (sourceContent.isNotEmpty()) {
             val correctedContent = contentWords(modelText)
-            val preserved = sourceContent.count { it in correctedContent }
+            val preserved = sourceContent.count { source ->
+                correctedContent.any { corrected -> sameContentWord(source, corrected) }
+            }
             if (preserved.toDouble() / sourceContent.size < 0.60) {
                 return fallback
             }
@@ -260,6 +262,32 @@ class CorrectionScreen(
                 }
             }
             .toSet()
+    }
+
+    /** Treat a small spelling edit as the same content word, e.g. "leter" -> "letter". */
+    private fun sameContentWord(source: String, corrected: String): Boolean {
+        if (source == corrected) return true
+        val longest = maxOf(source.length, corrected.length)
+        if (longest < 4 || kotlin.math.abs(source.length - corrected.length) > 1) return false
+        val allowedDistance = if (longest > 8) 2 else 1
+        var previous = IntArray(corrected.length + 1) { it }
+        for (i in source.indices) {
+            val current = IntArray(corrected.length + 1)
+            current[0] = i + 1
+            var rowMinimum = current[0]
+            for (j in corrected.indices) {
+                val cost = if (source[i] == corrected[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost
+                )
+                rowMinimum = minOf(rowMinimum, current[j + 1])
+            }
+            if (rowMinimum > allowedDistance) return false
+            previous = current
+        }
+        return previous[corrected.length] <= allowedDistance
     }
 
     private fun label(value: String, size: Float, bold: Boolean = false) = TextView(context).apply {

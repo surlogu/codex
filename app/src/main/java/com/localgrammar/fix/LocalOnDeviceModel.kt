@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Runs the bundled quantized T5 model in WebView's local ONNX Runtime WebAssembly backend. */
+/** Runs the bundled typo-aware T5 model in WebView's local ONNX Runtime WebAssembly backend. */
 class LocalOnDeviceModel(context: Context) {
     private val appContext = context.applicationContext
     private val pageReady = CompletableDeferred<Unit>()

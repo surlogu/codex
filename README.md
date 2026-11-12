@@ -2,7 +2,7 @@
 
 An Android text action for Gboard and other keyboards, plus a standalone editor. Type/paste text or select text in another app and choose **Fix grammar**. The app shows the result, word and character counts, and correction time; you can copy it or return it to the selected field when supported.
 
-The main corrector is a bundled, quantized T5-small model fine-tuned for English grammar correction. It runs locally with Transformers.js and ONNX Runtime WebAssembly. LanguageTool's bundled English rules help keep short spelling fixes from being rewritten awkwardly. The app does not request Internet permission, so the model works offline after installation.
+The main corrector is a bundled T5-Efficient-MINI model trained for English grammar correction with additional typo noise. Its ONNX encoder and initial decoder are quantized; inference runs locally with ONNX Runtime WebAssembly. LanguageTool's bundled English rules provide a second correction signal, and a safeguard rejects short-input rewrites that add unrelated wording. The app does not request Internet permission, so correction works offline after installation.
 
 ## Build
 
@@ -18,4 +18,4 @@ Some host apps do not support text replacement or expose the selected text as re
 
 ## License
 
-Application source: MIT. The T5 grammar model is MIT licensed; model attribution is in `app/src/main/assets/models/grammar-t5-small/MODEL_NOTICE.txt`. Transformers.js is Apache-2.0. ONNX Runtime Web is MIT. The LanguageTool fallback is LGPL-2.1; its bundled language resources may carry separate notices. See https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+Application source: MIT. The T5-Efficient-MINI grammar model is MIT licensed; model attribution is in `app/src/main/assets/models/grammar-t5-efficient-mini/MODEL_NOTICE.txt`. Transformers.js is Apache-2.0. ONNX Runtime Web is MIT. The LanguageTool fallback is LGPL-2.1; its bundled language resources may carry separate notices. See https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.

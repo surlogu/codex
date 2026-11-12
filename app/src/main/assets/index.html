@@ -7,42 +7,92 @@
 </head>
 <body>
 <script type="module">
-import { env, pipeline } from './transformers.min.js';
+import { AutoTokenizer, env } from './transformers.min.js';
+import * as ort from './ort.all.bundle.min.mjs';
 
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
 env.localModelPath = './models/';
 env.backends.onnx.wasm.wasmPaths = './';
 env.backends.onnx.wasm.numThreads = 1;
+ort.env.wasm.wasmPaths = './';
+ort.env.wasm.numThreads = 1;
 
-let grammarModel;
+const modelPath = './models/grammar-t5-efficient-mini/';
+let tokenizer;
+let encoder;
+let initialDecoder;
+let cachedDecoder;
+let loading;
 
-window.correctText = async (text) => {
-  try {
-    if (!grammarModel) {
-      NativeModel.onProgress('Loading the offline T5 grammar model…');
-      grammarModel = await pipeline(
-        'text2text-generation',
-        'grammar-t5-small',
-        { dtype: 'q8' }
-      );
-    }
-    NativeModel.onProgress('Correcting text on this device…');
-    const prompt = `Rewrite and fix: '${text}'`;
-    const result = await grammarModel(prompt, {
-      max_new_tokens: 96,
-      num_beams: 2,
-      early_stopping: true
+async function loadModel() {
+  if (encoder) return;
+  if (loading) return loading;
+  loading = (async () => {
+    NativeModel.onProgress('Loading the offline grammar model…');
+    tokenizer = await AutoTokenizer.from_pretrained('grammar-t5-efficient-mini', {
+      local_files_only: true
     });
-    let corrected = result?.[0]?.generated_text?.trim() ?? '';
-    if (corrected.length >= 2) {
-      const first = corrected[0];
-      const last = corrected[corrected.length - 1];
-      if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-        corrected = corrected.slice(1, -1).trim();
-      }
-    }
-    NativeModel.onResult(corrected);
+    const options = { executionProviders: ['wasm'] };
+    [encoder, initialDecoder, cachedDecoder] = await Promise.all([
+      ort.InferenceSession.create(`${modelPath}onnx/encoder_model_quantized.onnx`, options),
+      ort.InferenceSession.create(`${modelPath}onnx/init_decoder_model_quantized.onnx`, options),
+      ort.InferenceSession.create(`${modelPath}onnx/decoder_model_quantized.onnx`, options)
+    ]);
+  })();
+  try {
+    await loading;
+  } catch (error) {
+    loading = undefined;
+    throw error;
+  }
+}
+
+function argmax(values) {
+  let best = 0;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] > values[best]) best = i;
+  }
+  return best;
+}
+
+async function correct(text) {
+  await loadModel();
+  NativeModel.onProgress('Correcting text on this device…');
+  const encoded = tokenizer(text);
+  const inputIds = new ort.Tensor('int64', encoded.input_ids.data, encoded.input_ids.dims);
+  const attentionMask = new ort.Tensor('int64', encoded.attention_mask.data, encoded.attention_mask.dims);
+  const encoderOutput = await encoder.run({ input_ids: inputIds, attention_mask: attentionMask });
+
+  let decoderOutput = await initialDecoder.run({
+    input_ids: new ort.Tensor('int64', BigInt64Array.of(0n), [1, 1]),
+    encoder_attention_mask: attentionMask,
+    encoder_hidden_states: encoderOutput.hidden_states
+  });
+
+  let token = argmax(decoderOutput.logits.data);
+  const generatedIds = [];
+  let cacheNames = initialDecoder.outputNames.filter(name => name !== 'logits');
+  for (let step = 0; token !== 1 && step < 96; step++) {
+    generatedIds.push(token);
+    const feeds = {
+      input_ids: new ort.Tensor('int64', BigInt64Array.of(BigInt(token)), [1, 1]),
+      encoder_attention_mask: attentionMask,
+      encoder_hidden_states: encoderOutput.hidden_states
+    };
+    cacheNames.forEach((name, index) => {
+      feeds[`pkv_${index}`] = decoderOutput[name];
+    });
+    decoderOutput = await cachedDecoder.run(feeds);
+    cacheNames = cachedDecoder.outputNames.filter(name => name !== 'logits');
+    token = argmax(decoderOutput.logits.data);
+  }
+  return tokenizer.decode(generatedIds, { skip_special_tokens: true }).trim();
+}
+
+window.correctText = async text => {
+  try {
+    NativeModel.onResult(await correct(text));
   } catch (error) {
     NativeModel.onFailure(String(error?.message ?? error));
   }

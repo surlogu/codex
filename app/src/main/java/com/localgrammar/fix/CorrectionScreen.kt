@@ -52,7 +52,7 @@ class CorrectionScreen(
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         content.addView(label(if (canReplaceSelection) "Fix selected text" else "Offline Grammar Fix", 24f, true))
-        content.addView(label("T5-small offline model · text stays on this device", 14f), matchWidth().withTopMargin(4))
+        content.addView(label("T5-Efficient-MINI typo-aware offline model · text stays on this device", 14f), matchWidth().withTopMargin(4))
 
         content.addView(label("Text to correct", 16f, true), matchWidth().withTopMargin(24))
         input.apply {
@@ -204,11 +204,17 @@ class CorrectionScreen(
     }
 
     private fun chooseCorrection(input: String, modelText: String, rulesText: String?): String {
-        if (rulesText.isNullOrBlank() || rulesText == input || modelText.isBlank()) return modelText
+        if (modelText.isBlank()) return input
+        if (rulesText.isNullOrBlank()) return modelText
+        val inputWords = input.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         val modelWords = modelText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         val rulesWords = rulesText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        // Keep short spelling fixes when the generation model tries to paraphrase them.
-        return if (modelWords > 6 && modelWords > rulesWords * 1.5) rulesText else modelText
+        // Reject a short-input rewrite that changes the question or adds unrelated content.
+        if (inputWords <= 8 && modelWords > 5 && modelWords > inputWords * 1.6 + 1) {
+            return if (rulesText != input) rulesText else input
+        }
+        // Keep short spelling fixes when the model adds unnecessary wording.
+        return if (rulesText != input && modelWords > rulesWords * 1.5) rulesText else modelText
     }
 
     private fun label(value: String, size: Float, bold: Boolean = false) = TextView(context).apply {
